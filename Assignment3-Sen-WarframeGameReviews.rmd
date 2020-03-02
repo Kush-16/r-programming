@@ -1,0 +1,283 @@
+---
+title: "Assignment3-Sen-WarframeGameReviews"
+author: "Kushagra Sen"
+date: "2/11/2020"
+output: html_document
+---
+
+In this project, we are analyzing the sentiments towrads a game called "Warfare".
+The data set has got over 50,000 reviews spread across 4 years. (2016-2019)
+
+The dataset has been taken from Kaggle: https://www.kaggle.com/j457zhan/warframe-steam-user-reviews
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(readr)
+library(tidyr)
+library(tidytext)
+library(RColorBrewer)
+library(reshape2)
+library(wordcloud)
+library(igraph)
+library(widyr)
+library(ggraph)
+library(ngram)
+library(wordcloud2)
+library(stringr)
+library(tm)
+library(tidyverse)
+library(dplyr)
+library(DT)
+library(topicmodels)
+```
+
+```{r}
+warframe<-read.csv("https://drive.google.com/uc?export=download&id=1cO-ejpN8Kg0TsEshMUzrbfCB8FYdO8mg")
+head(warframe)
+```
+
+We have date written in a format MM/DD/YYYY and we are de-limiting it so that we can evaluate the monthly and yearly trends.
+```{r}
+warframe <- warframe %>%
+  separate(date
+           , into = c("Month", "Date", "Year"), sep = "/")
+```
+### **Next Step:** Graphical Representation
+
+**Graph 1**
+This graph shows the overall recommendations (TRUE or FALSE) for the game.
+
+```{r}
+ggplot(warframe, aes(recommended)) +
+  geom_bar(fill = "#0073C2FF")
+```
+
+Clearly, it has a lot of positive recommendations
+
+**Graph 2**
+This graph shows the recommendations on an yearly basis (2016-2019)
+
+```{r}
+ggplot(warframe, aes(x = as.numeric(Year),y="", fill = as.character(recommended)))+
+  geom_bar(stat="identity")+
+  labs(title="Bar Chart", 
+       subtitle="Yearly trend for recommendations the game Warfare", 
+       caption="Data source: Kaggle Warfare Game Reviews") + 
+  theme(axis.text.x = element_text(angle=0, vjust=0.2))
+```
+
+From this graph we see that there have been very less FALSE recommendations for this game from the time it has been launched
+
+**Graph 3**
+
+```{r}
+pie <- ggplot(warframe, aes(x = "", fill = factor(Year))) + 
+  geom_bar(width = 1) +
+  theme(axis.line = element_blank(), 
+        plot.title = element_text(hjust=0.5)) + 
+  labs(fill="class", 
+       x=NULL, 
+       y=NULL, 
+       title="Year on Year popularity trend", 
+       caption="Data Source: Kaggle Warfare Game Reviews")
+pie + coord_polar(theta = "y", start=0)
+```
+
+This shows that year 2018 was the best performing year.
+
+### **Tokenization**
+```{r}
+df <- warframe %>% mutate(Text = str_replace_all(text, "(<br />)+", " "))
+tokens <- df %>% unnest_tokens(output = word, input = Text)
+tokens %>%  dplyr::count(word, sort = TRUE)
+```
+
+As most of the words are stopwords, we should remove them.
+
+```{r}
+get_stopwords()
+
+cleaned_tokens <- tokens %>%  anti_join(get_stopwords())
+
+nums <- cleaned_tokens %>% filter(str_detect(word, "^[0-9]")) %>% select(word) %>% unique()
+head(nums)
+```
+
+```{r}
+cleaned_tokens <- cleaned_tokens %>%   anti_join(nums, by = "word")
+
+length(unique(cleaned_tokens$word))
+
+cleaned_tokens %>%   dplyr::count(word, sort = T) %>%  dplyr::rename(word_freq = n) %>%  
+  ggplot(aes(x=word_freq)) +  geom_histogram(aes(y=..count..), color="black", fill="red", alpha=0.3, bins=20) +  scale_x_continuous(breaks=c(0:5,10,100,500,10e3), trans="log1p", expand=c(0,0)) +  scale_y_continuous(breaks=c(0,100,1000,5e3,10e3,5e4,10e4,4e4), expand=c(0,0)) +  theme_bw() 
+```
+
+This graph shows the frequency of words in the cleaned tokens which we obtained after removing the rare words
+
+So it makes sense to remove rare words to improve the performance of text analytics.
+Let's remove words that have less than 10 appearances in our collection:
+
+```{r}
+rare <- cleaned_tokens %>%   dplyr::count(word) %>%  filter(n<10) %>%  select(word) %>% unique()
+ 
+cleaned_tokens <- cleaned_tokens %>%   anti_join(rare, by = "word")
+
+length(unique(cleaned_tokens$word))
+```
+
+
+### **Word Cloud**
+
+```{r}
+pal <- brewer.pal(8,"Dark2")
+
+cleaned_tokens %>%   dplyr::count(word) %>%  with(wordcloud(word, n, random.order = FALSE, max.words =350, colors=pal))
+```
+
+### **Sentiment Analysis**
+
+```{r}
+get_sentiments("nrc")
+get_sentiments("afinn")
+get_sentiments("bing")
+sent_reviews = cleaned_tokens %>%
+  left_join(get_sentiments("nrc")) %>%
+  rename(nrc = sentiment) %>%
+  left_join(get_sentiments("bing")) %>%
+  rename(bing = sentiment) %>%
+  left_join(get_sentiments("afinn")) %>%
+  rename(afinn = value)
+head(sent_reviews,5)
+```
+
+### **Most common positive and negative words**
+
+```{r}
+bing_word_counts <- sent_reviews %>%  filter(!is.na(bing)) %>%  dplyr::count(word, bing, sort = TRUE)
+head(bing_word_counts,10)
+```
+
+```{r}
+bing_word_counts %>%  filter(n > 1800) %>%  mutate(n = ifelse(bing == "negative", -n, n)) %>%
+  mutate(word = reorder(word, n)) %>%  ggplot(aes(word, n, fill = bing)) +  geom_col() +  coord_flip() +  labs(y = "Contribution to sentiment")
+```
+
+Above plot shows the positive and negative words and, their contribution to the overall sentiment
+
+Now, tokenizing by n-gram
+
+```{r}
+df$text<-as.character(df$text)
+bigrams <- df %>%  unnest_tokens(bigram, Text, token = "ngrams", n = 2)
+```
+
+```{r}
+bigrams %>%  dplyr::count(bigram, sort = TRUE)
+```
+
+### **Most common bigrams**
+
+```{r}
+bigrams %>%
+count(bigram, sort = TRUE)
+head(bigrams,5)
+```
+
+### **Filtering n-grams**
+
+```{r}
+bigrams_separated <- bigrams %>%  
+  separate(bigram, c("word1", "word2"), sep = " ")
+bigrams_filtered <- bigrams_separated %>%  
+  filter(!word1 %in% stop_words$word) %>%  
+  filter(!word2 %in% stop_words$word)
+bigrams_filtered <- bigrams_filtered %>% drop_na()
+bigrams_filtered %>% count(word1, word2, sort = TRUE)
+head(bigrams_filtered,5)
+```
+
+### **New Bigrams**
+
+```{r}
+bigrams_filtered %>%   dplyr::count(word1, word2, sort = TRUE)
+
+
+bigram_united <- bigrams_filtered %>%
+  unite(bigram, word1, word2, sep = " ")
+
+bigram_counts <- bigram_united %>% 
+  dplyr::count(bigram, sort = TRUE)
+
+bigram_counts %>% arrange(desc(n))%>% head(20)%>%ggplot(aes(x=factor(bigram,levels=bigram),y=n))+geom_bar(stat="identity",fill="#003E45")+labs(title="Top 20 bigram words in Comments")+coord_flip()
+
+```
+The popular Bigram is (10 10) which means 10/10 as we have removed the "/" sign.
+
+### **Word correlations**
+
+```{r}
+rare <- cleaned_tokens %>%
+  count(word) %>%
+  filter(n<1000) %>% #remove rare words
+  # < 1000 reviews
+  select(word) %>% distinct()
+word_cor <- cleaned_tokens %>%
+  filter(!word %in% rare$word) %>%
+  widyr::pairwise_cor(word, S.No) %>%
+  filter(!is.na(correlation),
+         correlation > .25)
+head(word_cor,5)
+```
+
+### **Visualizing the correlations**
+
+```{r}
+library(igraph)
+library(ggraph)
+word_cor %>%
+graph_from_data_frame() %>%
+ggraph(layout = "fr") +
+geom_edge_link(aes(edge_alpha = correlation), show.legend = FALSE) +
+geom_node_point(color = "lightblue", size = 5) +
+geom_node_text(aes(label = name), repel = TRUE) +
+theme_void()
+```
+
+### **Document Term Matrix**
+
+tf-idf is Term Frequency and Inverse document frequency. Using this, We can see the repititon of a term in a document and as compared to overall frequency of document.
+
+
+```{r}
+word_counts_by_SNo <- cleaned_tokens %>%  
+  group_by(S.No) %>%  
+  dplyr::count(word, sort = TRUE)
+word_counts_by_SNo
+
+review_dtm <- word_counts_by_SNo %>%
+cast_dtm(S.No, word, n)
+```
+
+```{r}
+tfidf <- word_counts_by_SNo %>%  
+  bind_tf_idf(word, S.No, n) 
+head(tfidf,5)
+```
+
+These are the TOP tf-idf in descending order
+
+```{r}
+top_tfidf <- tfidf %>%
+  group_by(S.No) %>%
+  arrange(desc(tf_idf)) %>%
+  top_n(3) %>% ungroup() %>%
+  arrange(S.No, -tf_idf) 
+head(top_tfidf,10)
+```
+
+Now creating a 4 topic LDA model:
+
+```{r}
+lda5 <- LDA(review_dtm, k = 4, control = list(seed = 1234))
+terms(lda5, 10)
+```
