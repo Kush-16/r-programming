@@ -1,0 +1,301 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html><head></head><body>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="fluid-row">
+
+
+
+<h1 class="title toc-ignore">GitHub account analysis</h1>
+<h4 class="author">Kushagra Sen</h4>
+<h4 class="date">1/29/2020</h4>
+
+</div>
+
+
+<div class="section level2">
+<h2>About the project</h2>
+<p>The project requires to choose a GitHub account with pre-defined parameters and analyse the details of its user, his/her followers, issues, repositories etc.</p>
+<p>GitHub Profile: “Doug Beck”</p>
+<p>GitHub Profile URL: “<a rel="noopener" href="https://github.com/beck" class="uri">https://github.com/beck</a>”</p>
+<div class="section level3">
+<h3>Google Drive Link:</h3>
+<p><a rel="noopener" href="https://drive.google.com/drive/folders/1e78Bw4HZKQ-g20NVm837Km22SR3d6Xoz?usp=sharing" class="uri">https://drive.google.com/drive/folders/1e78Bw4HZKQ-g20NVm837Km22SR3d6Xoz?usp=sharing</a></p>
+</div>
+</div>
+<div class="section level2">
+<h2><strong>Step 1:</strong> Setting up the account using GitHub Token.</h2>
+<pre class="r"><code>git_mytoken = &quot;6b56ad20155d011bca31cbf5af33090b6d97834e&quot;
+Sys.setenv(GITHUB_TOKEN = git_mytoken)
+json_git_user = gh(&quot;/users/beck&quot;)
+options(encoding = &#39;UTF-8&#39;)</code></pre>
+</div>
+<div class="section level2">
+<h2><strong>Step 2:</strong> Fetching required details about User’s repositories, followers, issues.</h2>
+<p>###<strong>Getting user’s repositories</strong></p>
+<pre class="r"><code>git_user_path &lt;- &quot;./repo/&quot;
+user_repos_list = gh(&quot;/users/beck/repos&quot;, .limit=Inf) 
+for(r in 1:length(user_repos_list))
+  {
+  export_git_user_json = toJSON(user_repos_list[r],pretty = TRUE)
+  write(export_git_user_json,paste(git_user_path,&quot;user_repos_&quot;,r,&quot;.json&quot;,sep=&quot;&quot;))
+  }</code></pre>
+<p>###<strong>Getting user’s followers</strong></p>
+<pre class="r"><code>git_user_path &lt;- &quot;./followers/&quot;
+user_followers_list = gh(&quot;/users/beck/followers&quot;, .limit=Inf)
+# Collecting all the followers in JSON files on local desktop
+for(i in 1:length(user_followers_list)) 
+  {
+  export_json = toJSON(user_followers_list[i],pretty = TRUE)
+  write(export_json,paste(git_user_path,&quot;user_followers_&quot;,i,&quot;.json&quot;,sep=&quot;&quot;))
+}</code></pre>
+<p>###<strong>Getting user’s issues</strong></p>
+<pre class="r"><code>issue_path &lt;- &quot;./issue/&quot;
+for(i in 1:length(user_repos_list)){
+  if (user_repos_list[[i]]$open_issues_count &gt; 0){
+    write(toJSON(gh(&quot;/repos/:owner/:repo/issues&quot;,
+                    owner = &#39;beck&#39;,
+                    issue= &#39;all&#39;,
+                    state= &#39;all&#39;,
+                    repo = user_repos_list[[i]]$name,
+                    .token = &quot;6b56ad20155d011bca31cbf5af33090b6d97834e&quot;), 
+                 pretty = TRUE),
+          file.path(issue_path, 
+                    paste(&quot;user_repos_list&quot;,i,&quot;.json&quot;,sep=&quot;&quot;)))
+  }}</code></pre>
+</div>
+<div class="section level2">
+<h2><strong>Step 2:</strong> Tabular Representation.</h2>
+<div class="section level3">
+<h3><em>A table showing the user’s id, name, public_repos, followers</em></h3>
+<pre class="r"><code>users_information = gh(&quot;/users/beck&quot;)
+user_df &lt;- users_information %&gt;%
+  
+  toJSON() %&gt;%
+  fromJSON() %&gt;%
+  
+  purrr::flatten() %&gt;%
+  
+  map_if(is_list, as_tibble) %&gt;%
+  
+  map_if(is_tibble, list) %&gt;%
+  
+  bind_cols() %&gt;%
+  as.data.frame
+
+user_df = user_df %&gt;% select(id, name, public_repos, followers)
+datatable(user_df)</code></pre>
+<div style="width:100%;height:auto;" class="datatables html-widget"></div>
+
+</div>
+<div class="section level3">
+<h3><em>A table summarizing the followers’ id, name, public_repos, followers</em></h3>
+<pre class="r"><code>followers_list_beck &lt;- gh(&quot;/users/beck/followers&quot;, .limit=Inf)
+
+follower = map_df(followers_list_beck, magrittr::extract, names(followers_list_beck[[1]]))
+
+followers_details = 
+  map(follower$login, ~gh(paste0(&quot;/users/&quot;, .)))
+
+Beck_followers_details &lt;- map_df(followers_details,magrittr::extract,c(&#39;login&#39;,&#39;id&#39;,&#39;public_repos&#39;,&#39;followers&#39;))
+datatable(Beck_followers_details)</code></pre>
+<div style="width:100%;height:auto;" class="datatables html-widget"></div>
+
+</div>
+<div class="section level3">
+<h3><em>A table summarizing the repositories’ name, language, size, forks_count, stargazers_count, watchers_count, open_issues_count</em></h3>
+<pre class="r"><code>path &lt;- &quot;./repo/&quot;
+files &lt;- dir(path, pattern = &quot;*.json&quot;)
+repo_df &lt;- files %&gt;%
+  map_df(~fromJSON(file.path(path, .), flatten = TRUE))
+repo_new=repo_df%&gt;% select(name,language,size, forks_count, stargazers_count,
+                           watchers_count,open_issues_count)
+datatable(repo_new)</code></pre>
+<div style="width:100%;height:auto;" class="datatables html-widget"></div>
+
+</div>
+<div class="section level3">
+<h3><em>A table summarizing the issues</em></h3>
+<pre class="r"><code>issues_path &lt;- &quot;./issue/&quot;
+git_Issues &lt;- dir(issues_path, pattern = &quot;*.json&quot;)
+git_Issues = git_Issues %&gt;% file.path(issues_path,.)</code></pre>
+<p>Flatten the JSON files</p>
+<pre class="r"><code>issues = list()
+for(i in 1:length(git_Issues)) {
+  df = fromJSON(git_Issues[[i]], flatten = TRUE)
+  if (!df[1,1]==&quot;&quot;){
+    issues[[i]] = df
+  }
+}</code></pre>
+<p>Filtering and summarizing the issues</p>
+<pre class="r"><code>Filtered_issues = bind_rows(issues)
+df_issues = as_tibble(Filtered_issues)
+
+colnames(df_issues)</code></pre>
+<pre><code>##  [1] &quot;url&quot;                      &quot;repository_url&quot;          
+##  [3] &quot;labels_url&quot;               &quot;comments_url&quot;            
+##  [5] &quot;events_url&quot;               &quot;html_url&quot;                
+##  [7] &quot;id&quot;                       &quot;node_id&quot;                 
+##  [9] &quot;number&quot;                   &quot;title&quot;                   
+## [11] &quot;labels&quot;                   &quot;state&quot;                   
+## [13] &quot;locked&quot;                   &quot;assignees&quot;               
+## [15] &quot;comments&quot;                 &quot;created_at&quot;              
+## [17] &quot;updated_at&quot;               &quot;author_association&quot;      
+## [19] &quot;body&quot;                     &quot;user.login&quot;              
+## [21] &quot;user.id&quot;                  &quot;user.node_id&quot;            
+## [23] &quot;user.avatar_url&quot;          &quot;user.gravatar_id&quot;        
+## [25] &quot;user.url&quot;                 &quot;user.html_url&quot;           
+## [27] &quot;user.followers_url&quot;       &quot;user.following_url&quot;      
+## [29] &quot;user.gists_url&quot;           &quot;user.starred_url&quot;        
+## [31] &quot;user.subscriptions_url&quot;   &quot;user.organizations_url&quot;  
+## [33] &quot;user.repos_url&quot;           &quot;user.events_url&quot;         
+## [35] &quot;user.received_events_url&quot; &quot;user.type&quot;               
+## [37] &quot;user.site_admin&quot;          &quot;closed_at&quot;               
+## [39] &quot;pull_request.url&quot;         &quot;pull_request.html_url&quot;   
+## [41] &quot;pull_request.diff_url&quot;    &quot;pull_request.patch_url&quot;</code></pre>
+<pre class="r"><code>df_issues &lt;- df_issues %&gt;% mutate(created_at = ymd_hms(created_at))
+df_issues &lt;- df_issues %&gt;% mutate(updated_at = ymd_hms(updated_at))
+
+Merged_df = merge(x = repo_df, y = df_issues, by.x=&quot;url&quot;,by.y=&quot;repository_url&quot;,sort=F)
+
+updated_issue = Merged_df %&gt;% select(name,state,open_issues_count,open_issues,created_at.y,
+                                     updated_at.y,pushed_at) %&gt;% 
+  mutate(issue_created_at = ymd_hms(created_at.y), issue_updated_at = ymd_hms(updated_at.y))
+
+updated_issue = updated_issue %&gt;% mutate(age=issue_updated_at-issue_created_at) %&gt;% 
+  mutate(avg_duration=mean(age)) %&gt;% 
+  mutate(year=substr(updated_at.y,0,4)) %&gt;% 
+  mutate(month=substr(updated_at.y,6,7))
+
+updated_issue = updated_issue %&gt;% 
+  select(name,state,open_issues_count,avg_duration,month,year,age,pushed_at) 
+
+datatable(updated_issue)</code></pre>
+<div style="width:100%;height:auto;" class="datatables html-widget"></div>
+
+</div>
+<div class="section level3">
+<h3><strong>Step 3:</strong> Graphical Representation</h3>
+<p><strong>Language Vs Size</strong></p>
+<pre class="r"><code>theme_set(theme_classic())
+
+ggplot(repo_new, aes(x=as.character(language), y=size)) + 
+  geom_bar(stat=&quot;identity&quot;, width=.9, fill=&quot;tomato3&quot;) + 
+  labs(title=&quot;Bar Chart&quot;, 
+       subtitle=&quot;Language used vs Size&quot;, 
+       caption=&quot;source: https://github.com/beck&quot;) + 
+  theme(axis.text.x = element_text(angle=0, vjust=0.2))</code></pre>
+<p><img loading="lazy" src="javascript://" width="672"/></p>
+<p><strong>Trends of open and closed issues</strong> The graph below shows the number of open and closed issues:</p>
+<pre class="r"><code>ggplot(df_issues, aes(x = as.character(state),y=number))+
+  geom_bar(stat=&quot;identity&quot;)+
+  labs(title=&quot;Bar Chart&quot;, 
+       subtitle=&quot;Open and CLosed Trends&quot;, 
+       caption=&quot;source: https://github.com/beck&quot;) + 
+  theme(axis.text.x = element_text(angle=0, vjust=0.2))</code></pre>
+<p><img loading="lazy" src="javascript://" width="672"/></p>
+<p>** Year-wise trends for open and closed issues**</p>
+<pre class="r"><code>ggplot(updated_issue, aes(x = as.numeric(year),y=&quot;&quot;, fill = as.character(state)))+
+  geom_bar(stat=&quot;identity&quot;)+
+  labs(title=&quot;Bar Chart&quot;, 
+       subtitle=&quot;Yearly trend for open and closed issues&quot;, 
+       caption=&quot;source: https://github.com/beck&quot;) + 
+  theme(axis.text.x = element_text(angle=0, vjust=0.2))</code></pre>
+<p><img loading="lazy" src="javascript://" width="672"/></p>
+</div>
+<div class="section level3">
+<h3>From the first graph we can see that JavaScript and Python have the largest size followed by PHP and CoffeeScript.</h3>
+</div>
+<div class="section level3">
+<h3>From the second graph we can figure out the number of open and closed issues throughout. This analysis can be used to see the performance of a Github user on the basis of open and closed issues</h3>
+</div>
+<div class="section level3">
+<h3>From the third graph we can see the year to year trend of open and closed issues</h3>
+</div>
+</div>
+
+
+
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" src="/d2l/common/math/MathML.js?v=20.20.1.19921-173 "></script><script type="text/javascript">document.addEventListener('DOMContentLoaded', function() { D2LMathML.DesktopInit('https://s.brightspace.com/lib/mathjax/2.6.1/MathJax.js?config=MML_HTMLorMML','https://s.brightspace.com/lib/mathjax/2.6.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML'); });</script></body></html>
