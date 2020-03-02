@@ -1,0 +1,107 @@
+---
+title: "Udemy Course Analysis"
+author: "Kushagra Sen"
+date: "1/13/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(DT)
+
+```
+
+### About the Dataset:
+
+**- The dataset is about the musical instrument courses that are been taken up on Udemy.com**
+
+**- The data is taken from:** https://data.world/chasewillden/musical-instrument-courses-from-udemy. 
+
+* The dataset is in a **CSV format** and includes the following entities:
+
+1. id - The course ID
+2. title - The course Title
+2. url - The course URL
+4. isPaid - Tells Whether the course is paid or not
+5. price - The price of course in USD
+6. numSubscribers - Number of subscribers for a course 
+7. numReviews - Number of reviews given for that course
+8. numPublishedLectures - Number of lectures published
+9. instructionalLevel - The level of course (Beginner, Intermediate and All Levels)
+10. contentInfo - Duration of course
+11. publishedTime - Date and Time stamp
+
+
+### **Step 1:** Reading the data as shown below.
+
+```{r}
+
+df<-read.csv("https://drive.google.com/uc?export=download&id=1MqDHRuT278II3x5qib-DXc6ePQaciRwr")
+datatable(df)
+```
+
+### Cleaning the data:
+
+For this analysis, we dont need some specific columns, so they are being dropped:
+```{r}
+df1 <- (select (df,-c(title,url,Column1,X,Is.Paid,Total,Percent)))
+datatable(df1)
+```
+
+### **Step 2:** This step includes tidying up the data.
+
+The column **publishedTime** is in the format *YYYY-MM-DD-Hours-Minutes-Seconds* and might cause an issue to group the yearly, monthly or hourly time while performing the analysis.There is also a character appended at the end of publishedTime which is unnecessary and should be removed.
+```{r}
+  
+df2<- df1 %>%
+  separate(publishedTime
+           , into = c("Date", "Time"), sep = "T")
+           
+df3 <- df2 %>%
+  separate(Date
+           , into = c("Year", "Month", "Day"), sep = "-")
+
+#Again some cleaning
+df3 = filter(df3, Year != "3 hours")
+df3$Time = str_replace(df3$Time,"Z","")
+
+datatable(df3)
+```
+
+### **Step 3:** Graphical Representation
+
+*Earlier, with the untidy data, It was not feasible to visualize the Yearly or Monthly trends.*
+
+**Graph 1**
+**The graph below shows the yearly trend for the Number of subscribers. We can see a significant dip in the number of subscribers from 2016 to 2017. If it was an untidy data, this trend wouln't have been noticed **
+```{r}
+theme_set(theme_classic())
+
+ggplot(df3, aes(x=Year, y=numSubscribers)) + 
+  geom_bar(stat="identity", width=.5, fill="tomato3") + 
+  labs(title="Bar Chart", 
+       subtitle="Level vs No. of Subscribers", 
+       caption="source: data.world") + 
+  theme(axis.text.x = element_text(angle=0, vjust=0.2))
+```
+
+
+**Graph 2**
+**This pie chart below shows the number of lectures published every month. Clearly, April (04) and May (05) have the most number of lectures published, while the least is in the month of September (09)**
+```{r}
+ggplot(df3, aes(x="", y=numPublishedLectures, fill = Month)) +
+  geom_bar(stat = "identity", width = 4) + coord_polar("y", start=0) +
+  labs(title="Pie Chart", 
+       subtitle="No. of Lectures published every 
+       Month", 
+       caption="source: data.world") +
+  theme_void()
+
+```
+
+
+### As we have seen the importance to tidying up the data, we can say that Udemy needs to spread their database schema to save the "publishedTime" in seperate columns. This will help the analysts to understand the Yearly, Monthly and Daily trends with respect to other important entities in the dataset.
